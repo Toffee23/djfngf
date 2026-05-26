@@ -1,4 +1,8 @@
-const layout = (content) => `<!DOCTYPE html>
+/**
+ * Global Flixora Email Wrapper Framework
+ * Safely renders content inside the premium minimalist HTML layout scaffolding.
+ */
+const renderEmailLayout = (content) => `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8"/>
@@ -11,7 +15,6 @@ const layout = (content) => `<!DOCTYPE html>
       <td align="center">
         <table width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:10px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.08)">
 
-          <!-- Header -->
           <tr>
             <td style="background:#12121a;padding:28px 36px;text-align:center">
               <h1 style="margin:0;color:#10b981;font-size:24px;letter-spacing:2px;font-weight:800">FLIXORA</h1>
@@ -21,11 +24,10 @@ const layout = (content) => `<!DOCTYPE html>
 
           ${content}
 
-          <!-- Footer -->
           <tr>
             <td style="background:#f9fafb;padding:20px 36px;border-top:1px solid #e5e7eb;text-align:center">
-              <p style="margin:0 0 4px;font-size:12px;color:#aaa">© Flixora · Built for Original Content</p>
-              <p style="margin:0;font-size:12px;color:#aaa">
+              <p style="margin:0;font-size:12px;color:#aaa">© Flixora · Built for Original Content</p>
+              <p style="margin:4px 0 0;font-size:12px;color:#aaa">
                 <a href="https://www.flixora.co.uk" style="color:#10b981;text-decoration:none">www.flixora.co.uk</a>
               </p>
             </td>
@@ -38,14 +40,15 @@ const layout = (content) => `<!DOCTYPE html>
 </body>
 </html>`;
 
-//  Friend Recommendation
+/**
+ * Template: Friend Movie Recommendation Notification
+ */
+export const friendRecommendationTemplate = (name, metaOptions) => {
+  // Defensive validation patch to prevent null destructuring exceptions from crashing the application thread
+  const actualOptions = metaOptions || {};
+  const { movieTitle, movieUrl, senderName } = actualOptions;
 
-export const friendRecommendationTemplate = (
-  name,
-  { movieTitle, movieUrl, senderName } = {},
-) =>
-  layout(`
-  <!-- Banner -->
+  return renderEmailLayout(`
   <tr>
     <td style="background:linear-gradient(135deg,#0f172a,#1e3a5f);padding:32px 36px;text-align:center">
       <div style="font-size:44px;margin-bottom:10px">🎥</div>
@@ -54,28 +57,19 @@ export const friendRecommendationTemplate = (
     </td>
   </tr>
 
-  <!-- Body -->
   <tr>
     <td style="padding:32px 36px 16px">
       <p style="margin:0;font-size:15px;color:#333;line-height:1.7">Hey <strong>${name}</strong>,</p>
       <p style="margin:12px 0 0;font-size:15px;color:#333;line-height:1.7">
         ${senderName ? `<strong>${senderName}</strong> just finished` : "A friend just finished"} watching a movie on Flixora and had to pass it on immediately.
-        The film was incredibly well-produced — strong storyline, amazing cinematography, and performances
-        that kept them engaged from beginning to end.
-      </p>
-      <p style="margin:12px 0 0;font-size:15px;color:#333;line-height:1.7">
-        What stood out most was how original and cinematic it felt. The pacing, soundtrack, and overall
-        production quality were genuinely impressive. If you're into quality storytelling and well-made films,
-        this one's for you.
+        The film was incredibly well-produced — strong storyline, amazing cinematography, and performances that kept them engaged throughout.
       </p>
     </td>
   </tr>
 
   ${
     movieTitle
-      ? `
-  <!-- Movie Card -->
-  <tr>
+      ? `<tr>
     <td style="padding:8px 36px">
       <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px">
         <tr>
@@ -90,7 +84,6 @@ export const friendRecommendationTemplate = (
       : ""
   }
 
-  <!-- CTA -->
   <tr>
     <td style="padding:24px 36px;text-align:center">
       <a href="${movieUrl || "https://www.flixora.co.uk"}"
@@ -100,7 +93,6 @@ export const friendRecommendationTemplate = (
     </td>
   </tr>
 
-  <!-- Sign-off -->
   <tr>
     <td style="padding:0 36px 32px">
       <p style="margin:0;font-size:14px;color:#333;line-height:1.7">
@@ -110,16 +102,18 @@ export const friendRecommendationTemplate = (
       <p style="margin:4px 0 0;font-size:14px;font-weight:700;color:#111">${senderName || "Your Friend"} via Flixora</p>
     </td>
   </tr>
-`);
+  `);
+};
 
-//  Watch-Along Invitation
+/**
+ * Template: Real-Time Watch-Along Session Invitation
+ */
+export const watchAlongTemplate = (name, sessionOptions) => {
+  // Defensive validation block to filter out null argument drops safely
+  const actualOptions = sessionOptions || {};
+  const { senderName, movieTitle, dateTime, joinUrl } = actualOptions;
 
-export const watchAlongTemplate = (
-  name,
-  { senderName, movieTitle, dateTime, joinUrl } = {},
-) =>
-  layout(`
-  <!-- Banner -->
+  return renderEmailLayout(`
   <tr>
     <td style="background:linear-gradient(135deg,#1a0533,#7c3aed);padding:32px 36px;text-align:center">
       <div style="font-size:44px;margin-bottom:10px">🍿</div>
@@ -128,18 +122,15 @@ export const watchAlongTemplate = (
     </td>
   </tr>
 
-  <!-- Body -->
   <tr>
     <td style="padding:32px 36px 16px">
       <p style="margin:0;font-size:15px;color:#333;line-height:1.7">Hey <strong>${name}</strong>,</p>
       <p style="margin:12px 0 0;font-size:15px;color:#333;line-height:1.7">
-        ${senderName ? `<strong>${senderName}</strong> found` : "Someone found"} an amazing movie on Flixora and would love for you both to watch it together
-        using the <strong>Watch Along</strong> feature — stream simultaneously in real time, no matter where you are.
+        ${senderName ? `<strong>${senderName}</strong> found` : "Someone found"} an amazing movie on Flixora and would love for you both to watch it together using the <strong>Watch Along</strong> feature — stream simultaneously in real time, no matter where you are.
       </p>
     </td>
   </tr>
 
-  <!-- Event Details -->
   <tr>
     <td style="padding:0 36px 8px">
       <table width="100%" cellpadding="0" cellspacing="0" style="background:#faf5ff;border-left:4px solid #7c3aed;border-radius:6px">
@@ -162,7 +153,6 @@ export const watchAlongTemplate = (
     </td>
   </tr>
 
-  <!-- CTA -->
   <tr>
     <td style="padding:28px 36px;text-align:center">
       <a href="${joinUrl || "https://www.flixora.co.uk"}"
@@ -173,7 +163,6 @@ export const watchAlongTemplate = (
     </td>
   </tr>
 
-  <!-- Sign-off -->
   <tr>
     <td style="padding:0 36px 32px">
       <p style="margin:0;font-size:14px;color:#333;line-height:1.7">
@@ -183,21 +172,48 @@ export const watchAlongTemplate = (
       <p style="margin:4px 0 0;font-size:14px;font-weight:700;color:#111">${senderName || "Your Friend"} via Flixora</p>
     </td>
   </tr>
-`);
+  `);
+};
 
-//  System Recommendation
-
-export const systemRecommendationTemplate = (name, { movies } = {}) => {
+/**
+ * Template: Algorithmic System Content Discovery Engine Recommendations Feed
+ */
+export const systemRecommendationTemplate = (name, recommendationPayload) => {
+  const actualPayload = recommendationPayload || {};
   const defaultMovies = [
     "Shadow Legacy",
     "Beyond Tomorrow",
     "Lost in Lagos",
     "The Last Frame",
   ];
-  const movieList = movies || defaultMovies;
+  const movieList = actualPayload.movies || defaultMovies;
 
-  return layout(`
-  <!-- Banner -->
+  const moviesListHtml = movieList
+    .map(
+      (movie, i) => `
+    <tr>
+      <td style="padding:10px 16px;background:${i % 2 === 0 ? "#f9fafb" : "#ffffff"};border-radius:6px;margin-bottom:4px">
+        <table cellpadding="0" cellspacing="0" style="width:100%">
+          <tr>
+            <td style="font-size:14px;color:#111;font-weight:600">
+              <span style="color:#10b981;margin-right:8px">▶</span>${typeof movie === "object" ? movie.title : movie}
+            </td>
+            ${
+              typeof movie === "object" && movie.url
+                ? `<td style="text-align:right">
+                    <a href="${movie.url}" style="font-size:12px;color:#10b981;text-decoration:none;font-weight:600">Watch →</a>
+                   </td>`
+                : ""
+            }
+          </tr>
+        </table>
+      </td>
+    </tr>
+    <tr><td style="height:4px"></td></tr>`
+    )
+    .join(""); // Safely explicitly joined to purge layout row string formatting errors completely
+
+  return renderEmailLayout(`
   <tr>
     <td style="background:linear-gradient(135deg,#0f1923,#10b981);padding:32px 36px;text-align:center">
       <div style="font-size:44px;margin-bottom:10px">🍿</div>
@@ -206,56 +222,24 @@ export const systemRecommendationTemplate = (name, { movies } = {}) => {
     </td>
   </tr>
 
-  <!-- Greeting -->
   <tr>
     <td style="padding:32px 36px 16px">
       <p style="margin:0;font-size:15px;color:#333;line-height:1.7">Hi <strong>${name}</strong>,</p>
       <p style="margin:12px 0 0;font-size:15px;color:#333;line-height:1.7">
-        Looking for something new to watch? We've picked out trending and original movies we think
-        you'll love — now streaming on Flixora.
-      </p>
-      <p style="margin:12px 0 0;font-size:15px;color:#333;line-height:1.7">
-        From powerful independent stories to global cinematic experiences, discover films created
-        by filmmakers around the world, all in one place.
+        Looking for something new to watch? We've picked out trending and original movies we think you'll love — now streaming on Flixora.
       </p>
     </td>
   </tr>
 
-  <!-- Movie List -->
   <tr>
     <td style="padding:8px 36px 24px">
       <p style="margin:0 0 14px;font-size:13px;font-weight:700;color:#065f46;text-transform:uppercase;letter-spacing:0.5px">🎬 Trending Now</p>
       <table width="100%" cellpadding="0" cellspacing="0">
-        ${movieList
-          .map(
-            (movie, i) => `
-        <tr>
-          <td style="padding:10px 16px;background:${i % 2 === 0 ? "#f9fafb" : "#ffffff"};border-radius:6px;margin-bottom:4px">
-            <table cellpadding="0" cellspacing="0" style="width:100%">
-              <tr>
-                <td style="font-size:14px;color:#111;font-weight:600">
-                  <span style="color:#10b981;margin-right:8px">▶</span>${typeof movie === "object" ? movie.title : movie}
-                </td>
-                ${
-                  typeof movie === "object" && movie.url
-                    ? `
-                <td style="text-align:right">
-                  <a href="${movie.url}" style="font-size:12px;color:#10b981;text-decoration:none;font-weight:600">Watch →</a>
-                </td>`
-                    : ""
-                }
-              </tr>
-            </table>
-          </td>
-        </tr>
-        <tr><td style="height:4px"></td></tr>`,
-          )
-          .join("")}
+        ${moviesListHtml}
       </table>
     </td>
   </tr>
 
-  <!-- CTA -->
   <tr>
     <td style="padding:0 36px 32px;text-align:center">
       <a href="https://www.flixora.co.uk"
@@ -265,5 +249,5 @@ export const systemRecommendationTemplate = (name, { movies } = {}) => {
       <p style="margin:16px 0 0;font-size:13px;color:#999">Thank you for being part of the Flixora community.</p>
     </td>
   </tr>
-`);
+  `);
 };

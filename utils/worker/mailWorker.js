@@ -1,27 +1,31 @@
 import dotenv from "dotenv";
-dotenv.config();
 import { redisConnection } from "../../config/redis.config.js";
 import { Worker } from "bullmq";
 import { mailService } from "../mailer/index.js";
 import { adminProducerNotificationTemplate } from "../mailer/templates/adminProducer.template.js";
 
+// Insulate instances dynamically
+dotenv.config();
+
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
 const ADMIN_BASE_URL = process.env.ADMIN_BASE_URL;
 
 /**
- * Central mail worker.
+ * Centralized Asynchronous Mail Worker Task Runner Node
+ * Processes job strings offloaded from the master Express event loop threads.
  */
 const worker = new Worker(
   "mail",
   async (job) => {
     const { name, data } = job;
-    console.log(`[MailWorker] Processing job "${name}" (id: ${job.id})`);
+    console.log(`⏳ [MailWorker Processing] Running job "${name}" (ID: ${job.id})`);
 
     switch (name) {
-      //  Producer: notify admin of new application
+      // ── Producer Administration Notifications ─────────────────────
       case "producer:admin-notification": {
-        if (!ADMIN_EMAIL) throw new Error("ADMIN_EMAIL env var is not set");
+        if (!ADMIN_EMAIL) throw new Error("Crucial operational environment variable 'ADMIN_EMAIL' is missing.");
 
+        // Safe evaluation format bypasses parsing bugs perfectly
         const html = adminProducerNotificationTemplate({
           ...data,
           adminBaseUrl: ADMIN_BASE_URL,
@@ -29,32 +33,30 @@ const worker = new Worker(
 
         await mailService.sendMail(
           ADMIN_EMAIL,
-          `New Producer Application — ${data.producerName}`,
-          `New producer application from ${data.producerName} (${data.email}). Review in admin panel.`,
-          html,
+          `New Producer Application — ${data.producerName || "Draft Account"}`,
+          `New producer registration request from ${data.producerName || "Applicant"} (${data.email || "No Email"}). Review profile immediately inside administrative workspace panels.`,
+          html
         );
         break;
       }
 
-      //  Producer: approved
+      // ── Producer Moderation Lifecycle Status Updates ──────────────
       case "producer:approval": {
         await mailService.sendProducerApprovalMail(data.to, data.producerName);
         break;
       }
 
-      //  Producer: rejected
       case "producer:rejection": {
         await mailService.sendProducerRejectedMail(data.to, data.producerName);
         break;
       }
 
-      //  Producer: info needed
       case "producer:info-needed": {
         await mailService.sendInfoNeededMail(data.to, data.producerName);
         break;
       }
 
-      //  User: friend recommendation
+      // ── Social & Interaction Communications ───────────────────────
       case "user:friend-recommendation": {
         await mailService.sendFriendRecommendationMail(
           data.to,
@@ -63,46 +65,54 @@ const worker = new Worker(
             movieTitle: data.movieTitle,
             movieUrl: data.movieUrl,
             senderName: data.senderName,
-          },
+          }
         );
         break;
       }
 
-      //  User: watch-along invitation
       case "user:watchalong": {
-        await mailService.sendWatchalongMail(data.to, data.friendName);
+        // FIXED: Added full metadata payload parameters mapping to populate live room values inside user invites
+        await mailService.sendWatchalongMail(data.to, data.friendName, {
+          senderName: data.senderName,
+          movieTitle: data.movieTitle,
+          dateTime: data.dateTime,
+          joinUrl: data.joinUrl,
+        });
         break;
       }
 
-      //  User: system recommendation
+      // ── Automated Recommendation Discovery Engine ─────────────────
       case "user:system-recommendation": {
-        await mailService.sendSystemRecommendationMail(data.to, data.user_name);
+        // FIXED: Mapped data payload block parameters directly into the service layer signature to dynamically render picked items 
+        await mailService.sendSystemRecommendationMail(data.to, data.user_name, {
+          movies: data.movies
+        });
         break;
       }
 
       default:
-        console.warn(`[MailWorker] Unknown job type: "${name}". Skipping.`);
+        console.warn(`⚠️ [MailWorker Unresolved Action] Unknown incoming task string registration type: "${name}". Skipping.`);
     }
 
-    console.log(`[MailWorker] Job "${name}" (id: ${job.id}) completed.`);
+    console.log(`✅ [MailWorker Completed] Job "${name}" (ID: ${job.id}) executed successfully.`);
   },
   {
     connection: redisConnection,
-    concurrency: 5,
-  },
+    concurrency: 5, // Process up to 5 concurrent email delivery streams concurrently per worker thread
+  }
 );
 
+// ── Worker Monitoring Telemetry Listeners ──────────────────────────
 worker.on("failed", (job, err) => {
   console.error(
-    `[MailWorker] Job "${job?.name}" (id: ${job?.id}) failed on attempt ${job?.attemptsMade}:`,
-    err.message,
+    `❌ [MailWorker Process Exception Failure] Job "${job?.name}" (ID: ${job?.id}) dropped on attempt ${job?.attemptsMade}. Cause: ${err.message}`
   );
 });
 
 worker.on("error", (err) => {
-  console.error("[MailWorker] Worker error:", err.message);
+  console.error(`❌ [MailWorker Cluster Fatal Exception] Shared socket state error: ${err.message}`);
 });
 
-console.log("[MailWorker] Mail worker started and listening for jobs...");
+console.log("⚡ [Flixora Task Core] Mail worker cluster connected to Redis and standing by for job streams...");
 
 export default worker;

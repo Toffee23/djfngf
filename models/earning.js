@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 const { Schema } = mongoose;
 
 /**
- * Earning — one record per movie view purchase.
+ * Earning — Tracks single movie purchase distributions and platform fee allocations.
  */
 const EarningSchema = new Schema(
   {
@@ -14,7 +14,7 @@ const EarningSchema = new Schema(
     },
     movie: {
       type: Schema.Types.ObjectId,
-      ref: "Movie",
+      ref: "Movie", // Ensure this case match maps perfectly to mongoose.model("Movie", ...) inside models/movies.js
       required: true,
     },
     viewer: {
@@ -24,19 +24,21 @@ const EarningSchema = new Schema(
     },
     grossAmount: {
       type: Number,
-      required: true, // full amount the viewer paid (in USD)
+      required: true, // Full fractional value amount viewer processed
     },
     platformFeePercent: {
       type: Number,
-      default: 20, // platform takes 20%
+      default: 20, // Platform default commissions slice allocation
     },
     netAmount: {
       type: Number,
-      required: true, // grossAmount * (1 - platformFeePercent / 100)
+      required: true,
+      default: 0, // Automatically evaluated dynamically via our pre-save document hook lifecycle below
     },
     currency: {
       type: String,
       default: "USD",
+      enum: ["USD", "GBP"], // Restricts entries to explicitly supported currencies
     },
     stripeSessionId: {
       type: String,
@@ -49,5 +51,17 @@ const EarningSchema = new Schema(
   { timestamps: true },
 );
 
-export const Earning =
-  mongoose.models.Earning || mongoose.model("Earning", EarningSchema);
+/**
+ * Mongoose Pre-Save Lifecycle Middleware Hook
+ * Automatically runs right before saving a document instance to prevent manual calculation drifts.
+ */
+EarningSchema.pre("validate", function (next) {
+  if (this.grossAmount !== undefined) {
+    const rawNet = this.grossAmount * (1 - (this.platformFeePercent || 20) / 100);
+    // Force strict 2-decimal point currency precision limits to eliminate floating point inflation bugs
+    this.netAmount = parseFloat(rawNet.toFixed(2));
+  }
+  next();
+});
+
+export const Earning = mongoose.models.Earning || mongoose.model("Earning", EarningSchema);

@@ -1,79 +1,99 @@
 import { User } from "../models/User.js";
 import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
 
+const JWT_SECRET = process.env.JWT_SECRET || "primepitsecret";
+
+// PUT /api/updateprofile/updateProfile
 export const updateUserDetails = async (req, res) => {
   try {
     const { fullname, email, age, username } = req.body;
     const userId = req.user.id;
 
     const user = await User.findById(userId);
-    if (!user) return res.status(404).json({ message: "User not found." });
+    if (!user) return res.status(404).json({ message: "User account profile not found." });
 
-    // Normalize and validate
-    const normalizedEmail = email?.trim().toLowerCase();
-
-    if (!fullname) {
+    if (!fullname || !fullname.trim()) {
       return res.status(400).json({ message: "Full name is required." });
     }
-    if (!username) {
+    if (!username || !username.trim()) {
       return res.status(400).json({ message: "Username is required." });
     }
-    if (!email) {
+    if (!email || !email.trim()) {
       return res.status(400).json({ message: "Email is required." });
     }
-    if (!age || isNaN(age) || age <= 16) {
-      return res
-        .status(400)
-        .json({ message: "Age must be a valid number from 16 and above." });
-    }
-    if (username && !/^[a-zA-Z0-9]+$/.test(username)) {
-      return res
-        .status(400)
-        .json({ message: "Username must be alphanumeric." });
+    if (!age || isNaN(age) || parseInt(age, 10) <= 16) {
+      return res.status(400).json({ message: "Age must be a valid number from 16 and above." });
     }
 
-    if (normalizedEmail && !/^\S+@\S+\.\S+$/.test(normalizedEmail)) {
+    const sanitizedUsername = username.trim();
+    if (!/^[a-zA-Z0-9]+$/.test(sanitizedUsername)) {
+      return res.status(400).json({ message: "Username must be alphanumeric." });
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!/^\S+@\S+\.\S+$/.test(normalizedEmail)) {
       return res.status(400).json({ message: "Invalid email format." });
     }
 
-    // Check for conflicts
-    if (username && username !== user.username) {
-      const existing = await User.findOne({ username });
-      if (existing)
-        return res.status(400).json({ message: "Username already in use." });
-      user.username = username;
+    // Check for unique configuration conflicts across separate records
+    if (sanitizedUsername !== user.username) {
+      const existingUsername = await User.findOne({ username: sanitizedUsername });
+      if (existingUsername) {
+        return res.status(400).json({ message: "Username already in use by another account." });
+      }
+      user.username = sanitizedUsername;
     }
 
-    if (normalizedEmail && normalizedEmail !== user.email) {
-      const existing = await User.findOne({ email: normalizedEmail });
-      if (existing)
-        return res.status(400).json({ message: "Email already in use." });
+    if (normalizedEmail !== user.email) {
+      const existingEmail = await User.findOne({ email: normalizedEmail });
+      if (existingEmail) {
+        return res.status(400).json({ message: "Email address already in use by another account." });
+      }
       user.email = normalizedEmail;
     }
 
-    if (fullname) user.fullname = fullname;
-    if (age) user.age = age;
+    user.fullname = fullname.trim();
+    user.age = parseInt(age, 10);
 
     await user.save();
-    res.status(200).json({ message: "User updated successfully." });
+
+    // Regenerate fresh signature credentials to align client states cleanly
+    const freshToken = jwt.sign(
+      { id: user._id, isAdmin: user.isAdmin, isProducer: user.isProducer },
+      JWT_SECRET,
+      { expiresIn: "7d" },
+    );
+
+    return res.status(200).json({ 
+      message: "User details updated successfully.", 
+      token: freshToken,
+      user: {
+        fullname: user.fullname,
+        username: user.username,
+        email: user.email,
+        age: user.age
+      }
+    });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Failed to update user." });
+    console.error("Update User Details Core Error:", err);
+    return res.status(500).json({ message: "Failed to update user parameters." });
   }
 };
 
+// PUT /api/updateprofile/updatePassword
 export const changePassword = async (req, res) => {
   try {
-    const { newPassword, confirmPassword } = req.body;
+    const { currentPassword, newPassword, confirmPassword } = req.body;
 
-    if (!newPassword || !confirmPassword) {
-      return res
-        .status(400)
-        .json({ message: "New password and confirmation are required." });
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      return res.status(400).json({ 
+        message: "Current password, new password, and confirmation are required." 
+      });
     }
 
     if (newPassword !== confirmPassword) {
-      return res.status(400).json({ message: "Passwords do not match." });
+      return res.status(400).json({ message: "New passwords do not match confirmation bounds." });
     }
 
     if (
@@ -84,19 +104,32 @@ export const changePassword = async (req, res) => {
       !/[!@#$%^&*]/.test(newPassword)
     ) {
       return res.status(400).json({
-        message:
-          "Password must be at least 8 characters long and contain uppercase, lowercase, number, and special character.",
+        message: "Password must be at least 8 characters long and contain uppercase, lowercase, number, and special character.",
       });
     }
 
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
-    await User.findByIdAndUpdate(req.user.id, {
-      password: hashedPassword,
-    });
+    // Hydrate whole account document block to fetch underlying target password hash string
+    const user = await User.findById(req.user.id);
+    if (!user) return res.status(404).json({ message: "User account profile not found." });
 
-    res.status(200).json({ message: "Password updated successfully!" });
+    // Enforce high-level security: Verify ownership criteria before mutating passwords
+    const currentPasswordValid = await bcrypt.compare(currentPassword, user.password);
+    if (!currentPasswordValid) {
+      return res.status(401).json({ message: "The current password provided is incorrect." });
+    }
+
+    // Block matching redundant loops
+    const passwordIsRedundant = await bcrypt.compare(newPassword, user.password);
+    if (passwordIsRedundant) {
+      return res.status(400).json({ message: "New password cannot match your current active password." });
+    }
+
+    user.password = await bcrypt.hash(newPassword, 10);
+    await user.save();
+
+    return res.status(200).json({ message: "Password updated successfully!" });
   } catch (err) {
-    console.error("Password change error:", err);
-    res.status(500).json({ message: "Failed to change password." });
+    console.error("Password change system core error:", err);
+    return res.status(500).json({ message: "Failed to securely change password." });
   }
 };

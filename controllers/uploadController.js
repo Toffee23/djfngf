@@ -1,39 +1,21 @@
 import { generateBatchSignatures } from '../utils/cloudinarySigner.js';
 
+// Define a strict whitelist of supported upload slot locations 
+// to prevent parameter injection and storage folder contamination
+const ALLOWED_SLOTS = [
+  'video', 
+  'trailer', 
+  'posterImage', 
+  'backdropImage', 
+  'bts', 
+  'subtitle', 
+  'profilePicture', 
+  'default'
+];
+
 /**
  * POST /api/upload/signatures
- *
- * Universal presigned-signature endpoint for direct Cloudinary uploads.
- * Works for any upload type: profile pictures, movie videos, posters, etc.
- *
- * Request body:
- * {
- *   "slots": ["profilePicture"]                          // single
- *   "slots": ["video", "posterImage", "backdropImage"]  // batch
- * }
- *
- * Supported slot names (see cloudinarySigner.js for the full list):
- *   video | trailer | posterImage | backdropImage | bts | subtitle
- *   profilePicture | default
- *
- * Response:
- * {
- *   "signatures": [
- *     {
- *       "slot":         "posterImage",
- *       "signature":    "abc123...",
- *       "timestamp":    1716000000,
- *       "folder":       "flixora_movies/assets/posters",
- *       "resourceType": "image",
- *       "cloudName":    "your_cloud_name",
- *       "apiKey":       "your_api_key"
- *     }
- *   ]
- * }
- *
- * The frontend uses each payload to POST directly to:
- *   https://api.cloudinary.com/v1_1/<cloudName>/<resourceType>/upload
- * with the fields: file, api_key, timestamp, signature, folder.
+ * Universal presigned-signature endpoint for direct, secure client-side Cloudinary uploads.
  */
 export const getUploadSignatures = (req, res) => {
   try {
@@ -41,7 +23,7 @@ export const getUploadSignatures = (req, res) => {
 
     if (!slots || !Array.isArray(slots) || slots.length === 0) {
       return res.status(400).json({
-        message: '`slots` must be a non-empty array of slot names.',
+        message: '`slots` parameter must be a non-empty array of valid slot names.',
         example: { slots: ['profilePicture'] },
       });
     }
@@ -49,16 +31,29 @@ export const getUploadSignatures = (req, res) => {
     const MAX_SLOTS = 10;
     if (slots.length > MAX_SLOTS) {
       return res.status(400).json({
-        message: `Maximum ${MAX_SLOTS} slots per request.`,
+        message: `Request validation failed. Maximum allocation boundary is ${MAX_SLOTS} slots per batch.`,
       });
     }
 
+    // Validate each slot entry explicitly against our structural whitelist
+    const invalidSlots = slots.filter(slot => !ALLOWED_SLOTS.includes(slot));
+    if (invalidSlots.length > 0) {
+      return res.status(400).json({
+        message: 'Signature generation rejected. Contains unmapped or unauthorized slot designations.',
+        invalidSlots,
+        allowedSlots: ALLOWED_SLOTS
+      });
+    }
+
+    // Generate signatures using the underlying Cloudinary utilities engine
     const signatures = generateBatchSignatures(slots);
+    
     return res.status(200).json({ signatures });
   } catch (err) {
-    console.error('Signature generation error:', err);
-    return res
-      .status(500)
-      .json({ message: 'Failed to generate signatures', error: err.message });
+    console.error('Signature Batch Generation Core Error:', err);
+    return res.status(500).json({ 
+      message: 'Failed to generate presigned upload signatures internally.', 
+      error: err.message 
+    });
   }
 };

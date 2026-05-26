@@ -1,168 +1,82 @@
 import express from "express";
-
 import { protect, requireProducer } from "../middleware/authMiddleware.js";
-
 import {
   getEarningsDashboard,
   getEarningsHistory,
 } from "../controllers/earningController.js";
-
-import { getWithdrawalHistory } from "../controllers/withdrawalController.js";
-
+import { 
+  getWithdrawalHistory, 
+  requestManualWithdrawal 
+} from "../controllers/withdrawalController.js";
 import { payoutToProducer } from "../controllers/stripeController.js";
 
 const router = express.Router();
 
-// All routes require authentication + producer access
+// All underlying routes require validated authentication + explicit producer tier access
 router.use(protect, requireProducer);
 
 /**
  * @swagger
  * tags:
- *   name: Earnings
- *   description: Producer earnings & withdrawals
+ * name: Earnings
+ * description: Producer analytics tracker, balance evaluations, and payout gateways.
  */
 
 /**
  * @swagger
  * /api/earnings/dashboard:
- *   get:
- *     summary: Get producer earnings dashboard
- *     description: Returns available balance, total earnings, total withdrawals, and unique viewers.
- *     tags: [Earnings]
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Earnings dashboard fetched successfully
- *         content:
- *           application/json:
- *             example:
- *               currentEarning: 245.5
- *               totalEarnings: 1240.75
- *               totalWithdrawal: 995.25
- *               totalViewers: 32
- *               currency: USD
- *       401:
- *         description: Unauthorized
- *       403:
- *         description: Producer account required
+ * get:
+ * summary: Get producer earnings statistics dashboard summary
+ * tags: [Earnings]
+ * security:
+ * - bearerAuth: []
+ * responses:
+ * 200:
+ * description: Dashboard statistics computed and delivered successfully.
  */
 router.get("/dashboard", getEarningsDashboard);
 
 /**
  * @swagger
  * /api/earnings/history:
- *   get:
- *     summary: Get paginated earnings history
- *     tags: [Earnings]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: query
- *         name: page
- *         schema:
- *           type: integer
- *           default: 1
- *       - in: query
- *         name: limit
- *         schema:
- *           type: integer
- *           default: 20
- *     responses:
- *       200:
- *         description: Earnings history fetched successfully
- *         content:
- *           application/json:
- *             example:
- *               earnings:
- *                 - _id: "685f2cb7f91d7d6a91ab1201"
- *                   producer: "685f2a4df91d7d6a91ab1001"
- *                   movie:
- *                     _id: "685f2b6cf91d7d6a91ab1101"
- *                     title: "The Last Mission"
- *                     posterImage: "https://example.com/poster.jpg"
- *                   viewer:
- *                     _id: "685f2d10f91d7d6a91ab1301"
- *                     username: "john_doe"
- *                   grossAmount: 20
- *                   platformFeePercent: 20
- *                   netAmount: 16
- *                   currency: "USD"
- *                   withdrawn: false
- *                   createdAt: "2026-05-18T12:00:00.000Z"
- *               pagination:
- *                 total: 25
- *                 page: 1
- *                 limit: 20
- *                 totalPages: 2
- *       401:
- *         description: Unauthorized
+ * get:
+ * summary: Get paginated historical breakdown of individual movie stream sales
+ * tags: [Earnings]
+ * security:
+ * - bearerAuth: []
  */
 router.get("/history", getEarningsHistory);
 
 /**
  * @swagger
- * /api/earnings/withdraw:
- *   post:
- *     summary: Withdraw producer earnings
- *     description: Transfers available balance to the producer Stripe Connect account.
- *     tags: [Earnings]
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: false
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               country:
- *                 type: string
- *                 example: Nigeria
- *     responses:
- *       201:
- *         description: Withdrawal successful
- *         content:
- *           application/json:
- *             example:
- *               message: "Withdrawal successful"
- *               amount: 245.5
- *               stripeTransferId: "tr_1Rt9AbCDeFG"
- *               withdrawalId: "685f312ef91d7d6a91ab1501"
- *       400:
- *         description: No available balance or Stripe onboarding incomplete
- *       401:
- *         description: Unauthorized
- *       403:
- *         description: Producer account required
+ * /api/earnings/withdraw/stripe:
+ * post:
+ * summary: Instant automated withdrawal via Stripe Connect Express channels
+ * tags: [Earnings]
+ * security:
+ * - bearerAuth: []
  */
-router.post("/withdraw", payoutToProducer);
+router.post("/withdraw/stripe", payoutToProducer);
+
+/**
+ * @swagger
+ * /api/earnings/withdraw/manual:
+ * post:
+ * summary: Request localized manual bank transfer payout review (e.g., NG Local Bank Clearing)
+ * tags: [Earnings]
+ * security:
+ * - bearerAuth: []
+ */
+router.post("/withdraw/manual", requestManualWithdrawal);
 
 /**
  * @swagger
  * /api/earnings/withdrawals:
- *   get:
- *     summary: Get paginated withdrawal history
- *     tags: [Earnings]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: query
- *         name: page
- *         schema:
- *           type: integer
- *           default: 1
- *       - in: query
- *         name: limit
- *         schema:
- *           type: integer
- *           default: 10
- *     responses:
- *       200:
- *         description: Withdrawal history fetched successfully
- *       401:
- *         description: Unauthorized
+ * get:
+ * summary: Get complete paginated history logs of all manual and automated withdrawals
+ * tags: [Earnings]
+ * security:
+ * - bearerAuth: []
  */
 router.get("/withdrawals", getWithdrawalHistory);
 

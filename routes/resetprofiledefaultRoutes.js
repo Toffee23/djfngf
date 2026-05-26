@@ -3,119 +3,58 @@ import {
   resetPasswordToDefault,
   resetProfile,
 } from "../controllers/resetprofiledefaultController.js";
+import { protect } from "../middleware/authMiddleware.js";
+
 const router = express.Router();
-import { protect, requireSubscription } from "../middleware/authMiddleware.js";
-// const resetProfileDefaultController = require("../controllers/resetprofiledefaultController.js");
+
+/**
+ * @swagger
+ * tags:
+ * name: Account Reset Recovery
+ * description: Restores account properties back to original registration states.
+ */
+
+// Global Interceptor Stack: Every single reset action requires verified authentication signatures
+router.use(protect);
 
 /**
  * @swagger
  * /api/resetprofile/resetProfile:
- *   put:
- *     summary: Reset user profile to default
- *     description: Resets the authenticated user's profile (fullname, username, email, age) to their original signup values.
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Profile has been reset successfully.
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 message:
- *                   type: string
- *                   example: Profile has been reset to original signup details.
- *                 user:
- *                   type: object
- *                   properties:
- *                     fullname:
- *                       type: string
- *                       example: John Doe
- *                     username:
- *                       type: string
- *                       example: johndoe
- *                     email:
- *                       type: string
- *                       example: johndoe@example.com
- *                     age:
- *                       type: number
- *                       example: 22
- *       404:
- *         description: User or default profile not found.
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 message:
- *                   type: string
- *                   example: User or default profile not found.
- *       409:
- *         description: Reset failed due to username/email conflict.
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 message:
- *                   type: string
- *                   example: Cannot reset profile. Original username or email is now in use by another user.
- *       500:
- *         description: Server error while resetting profile.
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 message:
- *                   type: string
- *                   example: Failed to reset profile.
+ * put:
+ * summary: Reset active user profile values back to original signup configurations
+ * description: Overwrites active user properties (fullname, username, email, age) with their original immutable default records.
+ * tags: [Account Reset Recovery]
+ * security:
+ * - bearerAuth: []
+ * responses:
+ * 200:
+ * description: Profile reverted back to baseline default metrics successfully.
+ * 404:
+ * description: User profile or backup configuration states not found.
+ * 409:
+ * description: Operation aborted. Original username or email has since been claimed by another user record.
+ * 500:
+ * description: Internal server error processing data mutations.
  */
-
-router.put("/resetProfile", protect, resetProfile);
+router.put("/resetProfile", resetProfile);
 
 /**
  * @swagger
  * /api/resetprofile/resetPassword:
- *   put:
- *     summary: Reset password to default
- *     description: Resets the authenticated user's password to the original password used during signup.
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Password reset to original successful.
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 message:
- *                   type: string
- *                   example: Password has been reset to your original signup password.
- *       404:
- *         description: User or original password not found.
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 message:
- *                   type: string
- *                   example: User or default password not found.
- *       500:
- *         description: Server error while resetting password.
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 message:
- *                   type: string
- *                   example: Failed to reset password.
+ * put:
+ * summary: Revert user account password back to their original signup credentials
+ * description: Replaces the active account password hash with the original default signup credentials.
+ * tags: [Account Reset Recovery]
+ * security:
+ * - bearerAuth: []
+ * responses:
+ * 200:
+ * description: Account password hash successfully reset back to default parameters.
+ * 404:
+ * description: Target profile context or signup fallback hash mapping not found.
+ * 500:
+ * description: Internal error processing secure hash mutation routines.
  */
-
-router.put("/resetPassword", protect, resetPasswordToDefault);
+router.put("/resetPassword", resetPasswordToDefault);
 
 export default router;
