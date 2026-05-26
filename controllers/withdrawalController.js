@@ -1,38 +1,14 @@
 import { Earning } from '../models/earning.js';
 import { Withdrawal } from '../models/withdrawal.js';
 
-// Supported currencies per the UI note ("USD AND GBP as base currencies")
 const SUPPORTED_CURRENCIES = ['USD', 'GBP'];
 
 /**
- * POST /api/earnings/withdraw
- *
- * Initiates a withdrawal request.
- *
- * Body:
- * {
- *   "method":   "bank_transfer" | "debit_card",
- *   "country":  "Nigeria",
- *   "currency": "USD",           // optional, defaults to USD
- *
- *   // if method === "bank_transfer":
- *   "bankDetails": {
- *     "bankName":      "GTBank",
- *     "accountNumber": "0123456789",
- *     "accountName":   "John Doe",
- *     "routingNumber": "...",   // USD wires
- *     "sortCode":      "...",   // GBP wires
- *     "iban":          "..."    // optional
- *   },
- *
- *   // if method === "debit_card":
- *   "cardDetails": {
- *     "last4":       "4242",
- *     "cardNetwork": "Visa"
- *   }
- * }
+ * POST /api/earnings/withdraw-manual
+ * Initiates a manual country-specific withdrawal review request.
+ * (Renamed from requestWithdrawal to resolve the naming collision with Stripe Connect endpoints)
  */
-export const requestWithdrawal = async (req, res) => {
+export const requestManualWithdrawal = async (req, res) => {
   try {
     const producerId = req.user.id;
     const {
@@ -43,32 +19,32 @@ export const requestWithdrawal = async (req, res) => {
       cardDetails,
     } = req.body;
 
-    // ── Validation ────────────────────────────────────────────────
+    // ── Validation Layers ──────────────────────────────────────────
     if (!method || !['bank_transfer', 'debit_card'].includes(method)) {
       return res.status(400).json({
-        message: 'method must be "bank_transfer" or "debit_card".',
+        message: 'Invalid withdrawal method specified. Must be "bank_transfer" or "debit_card".',
       });
     }
 
-    if (!country) {
-      return res.status(400).json({ message: 'country is required.' });
+    if (!country || !country.trim()) {
+      return res.status(400).json({ message: 'Target country location context is required.' });
     }
 
-    if (!SUPPORTED_CURRENCIES.includes(currency.toUpperCase())) {
+    const targetedCurrency = currency.toUpperCase().trim();
+    if (!SUPPORTED_CURRENCIES.includes(targetedCurrency)) {
       return res.status(400).json({
-        message: `currency must be one of: ${SUPPORTED_CURRENCIES.join(', ')}.`,
+        message: `Currency parameter rejected. Must be one of: ${SUPPORTED_CURRENCIES.join(', ')}.`,
       });
     }
 
     if (method === 'bank_transfer') {
       if (
-        !bankDetails?.bankName ||
-        !bankDetails?.accountNumber ||
-        !bankDetails?.accountName
+        !bankDetails?.bankName || !bankDetails?.bankName.trim() ||
+        !bankDetails?.accountNumber || !bankDetails?.accountNumber.trim() ||
+        !bankDetails?.accountName || !bankDetails?.accountName.trim()
       ) {
         return res.status(400).json({
-          message:
-            'bankDetails.bankName, accountNumber, and accountName are required for bank transfers.',
+          message: 'bankName, accountNumber, and accountName parameter items are required for bank transfers.',
         });
       }
     }
@@ -76,51 +52,65 @@ export const requestWithdrawal = async (req, res) => {
     if (method === 'debit_card') {
       if (!cardDetails?.last4 || !cardDetails?.cardNetwork) {
         return res.status(400).json({
-          message:
-            'cardDetails.last4 and cardDetails.cardNetwork are required for debit card withdrawals.',
+          message: 'cardDetails.last4 and cardDetails.cardNetwork parameters are required for debit card extractions.',
         });
       }
     }
 
-    // ── Available balance ─────────────────────────────────────────
-    const unwithdrawnEarnings = await Earning.find({
+    // ── Segregated Currency Balance Engine ──────────────────────────
+    // Enforce isolation rules: Query exclusively for records matching the target request currency
+    const matchingUnwithdrawnEarnings = await Earning.find({
       producer: producerId,
+      currency: targetedCurrency,
       withdrawn: false,
     });
 
-    const availableBalance = unwithdrawnEarnings.reduce(
-      (sum, e) => sum + e.netAmount,
+    const isolatedCurrencyBalance = matchingUnwithdrawnEarnings.reduce(
+      (sum, e) => sum + (e.netAmount || 0),
       0,
     );
 
-    if (availableBalance <= 0) {
+    const sanitizedBalance = parseFloat(isolatedCurrencyBalance.toFixed(2));
+
+    if (sanitizedBalance <= 0) {
       return res.status(400).json({
-        message: 'No available balance to withdraw.',
+        message: `Insufficient financial ledger balance allocation for requested currency: ${targetedCurrency}`,
         availableBalance: 0,
+        currency: targetedCurrency
       });
     }
 
-    // ── Create withdrawal record ───────────────────────────────────
+    // ── Create Withdrawal Entry ───────────────────────────────────
     const withdrawal = await Withdrawal.create({
       producer: producerId,
-      amount: parseFloat(availableBalance.toFixed(2)),
-      currency: currency.toUpperCase(),
+      amount: sanitizedBalance,
+      currency: targetedCurrency,
       method,
-      country,
-      bankDetails: method === 'bank_transfer' ? bankDetails : undefined,
-      cardDetails: method === 'debit_card' ? cardDetails : undefined,
+      country: country.trim(),
+      bankDetails: method === 'bank_transfer' ? {
+        bankName: bankDetails.bankName.trim(),
+        accountNumber: bankDetails.accountNumber.trim(),
+        accountName: bankDetails.accountName.trim(),
+        routingNumber: bankDetails.routingNumber?.trim(),
+        sortCode: bankDetails.sortCode?.trim(),
+        iban: bankDetails.iban?.trim()
+      } : undefined,
+      cardDetails: method === 'debit_card' ? {
+        last4: cardDetails.last4.trim(),
+        cardNetwork: cardDetails.cardNetwork.trim()
+      } : undefined,
       status: 'pending',
     });
 
-    // ── Mark earnings as withdrawn ─────────────────────────────────
-    const earningIds = unwithdrawnEarnings.map((e) => e._id);
+    // ── Mutate Target Earning Records Pool ──────────────────────────
+    const targetEarningIds = matchingUnwithdrawnEarnings.map((e) => e._id);
     await Earning.updateMany(
-      { _id: { $in: earningIds } },
+      { _id: { $in: targetEarningIds } },
       { $set: { withdrawn: true } },
     );
 
-    res.status(201).json({
-      message: 'Withdrawal request submitted successfully.',
+    return res.status(201).json({
+      message: 'Manual country withdrawal review request submitted successfully.',
       withdrawal: {
         id: withdrawal._id,
         amount: withdrawal.amount,
@@ -132,23 +122,20 @@ export const requestWithdrawal = async (req, res) => {
       },
     });
   } catch (err) {
-    console.error('Withdrawal error:', err);
-    res
-      .status(500)
-      .json({ message: 'Failed to process withdrawal', error: err.message });
+    console.error('Manual Withdrawal Core Exception Error:', err);
+    return res.status(500).json({ message: 'Failed to process withdrawal parameters request.', error: err.message });
   }
 };
 
 /**
- * GET /api/earnings/withdrawals?page=1&limit=10
- *
- * Paginated withdrawal history for the authenticated producer.
+ * GET /api/earnings/withdrawals
+ * Paginated manual withdrawal history log for the creator dashboard context.
  */
 export const getWithdrawalHistory = async (req, res) => {
   try {
     const producerId = req.user.id;
-    const page = Math.max(1, parseInt(req.query.page) || 1);
-    const limit = Math.min(100, parseInt(req.query.limit) || 10);
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(100, parseInt(req.query.limit, 10) || 10);
     const skip = (page - 1) * limit;
 
     const [withdrawals, total] = await Promise.all([
@@ -157,12 +144,12 @@ export const getWithdrawalHistory = async (req, res) => {
         .skip(skip)
         .limit(limit)
         .select(
-          '-bankDetails.accountNumber -bankDetails.iban -bankDetails.routingNumber -bankDetails.sortCode',
-        ), // hide sensitive fields
+          '-bankDetails.accountNumber -bankDetails.iban -bankDetails.routingNumber -bankDetails.sortCode -cardDetails.token',
+        ), // Clean scrub of underlying raw account vectors before passing to the interface
       Withdrawal.countDocuments({ producer: producerId }),
     ]);
 
-    res.status(200).json({
+    return res.status(200).json({
       withdrawals,
       pagination: {
         total,
@@ -174,12 +161,10 @@ export const getWithdrawalHistory = async (req, res) => {
       },
     });
   } catch (err) {
-    console.error('Withdrawal history error:', err);
-    res
-      .status(500)
-      .json({
-        message: 'Failed to fetch withdrawal history',
-        error: err.message,
-      });
+    console.error('Withdrawal history execution error:', err);
+    return res.status(500).json({
+      message: 'Failed to fetch withdrawal historical record tracks.',
+      error: err.message,
+    });
   }
 };

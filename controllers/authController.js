@@ -1,35 +1,33 @@
-import { config } from "dotenv";
-config();
 import { User } from "../models/User.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
-const JWT_SECRET = process.env.JWT_SECRET;
+
+const JWT_SECRET = process.env.JWT_SECRET || "primepitsecret";
+
 export const signUp = async (req, res) => {
   try {
-    // console.log("SIGNUP ROUTE HIT!", req.body);
     const { fullname, email, age, username, password } = req.body;
 
-    const normalizedEmail = email.trim().toLowerCase();
-
-    if (!fullname)
-      return res.status(400).json({ message: "Fullname is required." });
-    if (!username)
-      return res.status(400).json({ message: "Username is required." });
-    if (!/^[a-zA-Z0-9]+$/.test(username))
-      return res
-        .status(400)
-        .json({ message: "Username must be alphanumeric." });
-    if (!email) return res.status(400).json({ message: "Email is required." });
-    if (!/^\S+@\S+\.\S+$/.test(email))
-      return res.status(400).json({ message: "Email format is invalid." });
-    if (!age || isNaN(age) || age <= 16) {
-      return res
-        .status(400)
-        .json({ message: "Age must be a valid number from 16 and above." });
+    if (!fullname) return res.status(400).json({ message: "Fullname is required." });
+    if (!username) return res.status(400).json({ message: "Username is required." });
+    
+    if (!/^[a-zA-Z0-9]+$/.test(username)) {
+      return res.status(400).json({ message: "Username must be alphanumeric." });
     }
-    if (!password)
-      return res.status(400).json({ message: "Password is required." });
+    
+    if (!email) return res.status(400).json({ message: "Email is required." });
+    
+    // Normalize input immediately before validating format
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!/^\S+@\S+\.\S+$/.test(normalizedEmail)) {
+      return res.status(400).json({ message: "Email format is invalid." });
+    }
+
+    if (!age || isNaN(age) || age <= 16) {
+      return res.status(400).json({ message: "Age must be a valid number from 16 and above." });
+    }
+    if (!password) return res.status(400).json({ message: "Password is required." });
+    
     if (
       password.length < 8 ||
       !/[A-Z]/.test(password) ||
@@ -38,39 +36,33 @@ export const signUp = async (req, res) => {
       !/[!@#$%^&*]/.test(password)
     ) {
       return res.status(400).json({
-        message:
-          "Password must be at least 8 characters long and contain uppercase, lowercase, number, and special character.",
+        message: "Password must be at least 8 characters long and contain uppercase, lowercase, number, and special character.",
       });
     }
 
     const existingUser = await User.findOne({
-      $or: [{ email: normalizedEmail }, { username }],
+      $or: [{ email: normalizedEmail }, { username: username.trim() }],
     });
 
     if (existingUser) {
-      return res
-        .status(400)
-        .json({ message: "Username or email already in use." });
+      return res.status(400).json({ message: "Username or email already in use." });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const newUser = new User({
-      fullname,
+      fullname: fullname.trim(),
       email: normalizedEmail,
-      age,
-      username,
+      age: parseInt(age, 10),
+      username: username.trim(),
       password: hashedPassword,
-
-      // Set default profile details
       defaultProfile: {
-        fullname,
+        fullname: fullname.trim(),
         email: normalizedEmail,
-        username,
-        age,
+        username: username.trim(),
+        age: parseInt(age, 10),
       },
       defaultPasswordHash: hashedPassword,
-
       isSubscribed: false,
       subscriptionType: "basic",
       hasGameAccess: false,
@@ -78,9 +70,8 @@ export const signUp = async (req, res) => {
 
     await newUser.save();
 
-    const token = jwt.sign({ id: newUser._id }, JWT_SECRET, {
-      expiresIn: "7d",
-    });
+    const token = jwt.sign({ id: newUser._id }, JWT_SECRET, { expiresIn: "7d" });
+    
     return res.status(201).json({
       message: "User registered successfully!",
       token,
@@ -88,24 +79,24 @@ export const signUp = async (req, res) => {
       email: newUser.email,
       username: newUser.username,
       isSubscribed: newUser.isSubscribed,
-      // hasGameAccess: newUser.hasGameAccess,
       subscriptionType: newUser.subscriptionType,
     });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Signup failed." });
+    console.error("Signup System Error:", err);
+    return res.status(500).json({ message: "Signup failed internally." });
   }
 };
+
 export const signIn = async (req, res) => {
   try {
     const { username, password } = req.body;
 
     if (!username || !password) {
-      return res
-        .status(400)
-        .json({ message: "Username and password are required." });
+      return res.status(400).json({ message: "Username and password are required." });
     }
-    const user = await User.findOne({ username });
+    
+    // Standardizing lookup to match normalization
+    const user = await User.findOne({ username: username.trim() });
 
     if (!user) {
       return res.status(400).json({ message: "User not Found" });
@@ -121,6 +112,7 @@ export const signIn = async (req, res) => {
       JWT_SECRET,
       { expiresIn: "7d" },
     );
+    
     return res.status(200).json({
       message: "Login successful.",
       token,
@@ -129,36 +121,31 @@ export const signIn = async (req, res) => {
       userId: user._id,
       isProducer: user.isProducer,
       isSubscribed: user.isSubscribed,
-      // hasGameAccess: user.hasGameAccess,
       subscriptionType: user.subscriptionType || null,
     });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Signin failed." });
+    console.error("Signin System Error:", err);
+    return res.status(500).json({ message: "Signin failed internally." });
   }
 };
 
 export const logout = async (req, res) => {
-  // This assumes JWT is stored client-side (localStorage or cookie)
-  // You may optionally blacklist the token if needed
-
-  return res.status(200).json({
-    message: "Logout successful",
-  });
+  return res.status(200).json({ message: "Logout successful" });
 };
 
-// ==============================start=============================
 export const forgotPassword = async (req, res) => {
   try {
     const { email } = req.body;
-    if (!email) throw new Error(`Enter a valid and registered email`);
-    //send forgot password mail to user
-    //we then return success message
-
+    if (!email) {
+      return res.status(400).json({ message: "Enter a valid and registered email" });
+    }
+    
+    // Note: Mail worker queues are currently commented out in index.js
     return res.status(200).json({
-      message: `reset password link or data sent!`,
+      message: "reset password link or data sent!",
     });
   } catch (err) {
-    res.status().json({ message: `Error forgot password! ${err?.message}` });
+    console.error("Forgot Password System Error:", err);
+    return res.status(500).json({ message: `Error forgot password! ${err?.message}` });
   }
 };

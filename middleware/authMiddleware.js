@@ -1,86 +1,115 @@
 import jwt from "jsonwebtoken";
 import { User } from "../models/User.js";
 
-// Middleware to protect routes and check for subscription status
-// Adjust the path if different
+const JWT_SECRET = process.env.JWT_SECRET || "primepitsecret";
 
+/**
+ * Global protection middleware to decrypt identity tokens and verify core permissions
+ */
 export const protect = async (req, res, next) => {
-  const authHeader = req.headers.authorization;
-
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return res.status(401).json({ message: "No token provided" });
-  }
-
-  const token = authHeader.split(" ")[1];
-
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    if (!decoded) return res.status(401).json({ message: "Invalid token" });
-    const user = await User.findById(decoded.id);
+    const authHeader = req.headers.authorization;
 
-    if (!user) {
-      return res.status(401).json({ message: "User not found" });
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ message: "Access denied. No authorization token provided." });
     }
 
-    // Attach only needed fields
+    const token = authHeader.split(" ")[1];
+    const decoded = jwt.verify(token, JWT_SECRET);
+
+    if (!decoded || !decoded.id) {
+      return res.status(401).json({ message: "Invalid token validation parameters signature match." });
+    }
+
+    const user = await User.findById(decoded.id);
+    if (!user) {
+      return res.status(401).json({ message: "User account session no longer exists." });
+    }
+
+    // Attach essential permission criteria securely to the request stack context
     req.user = {
       id: user._id,
       username: user.username,
-      subscriptionType: user.subscriptionType,
-      hasGameAccess: user.hasGameAccess,
-      isAdmin: user.isAdmin,
-      isProducer: user.isProducer,
-      isSubscribed: user.isSubscribed,
-      subscriptionExpires: user.subscriptionExpires,
+      email: user.email,
+      subscriptionType: user.subscriptionType || "basic",
+      hasGameAccess: user.hasGameAccess || false,
+      isAdmin: user.isAdmin || false,
+      isProducer: user.isProducer || false,
+      isSubscribed: user.isSubscribed || false,
+      subscriptionExpires: user.subscriptionExpires || null,
     };
 
-    next();
+    return next();
   } catch (err) {
-    console.error("JWT verification failed:", err);
-    return res.status(401).json({ message: "Invalid token" });
+    console.error("JWT Security Interceptor Failure:", err.message);
+    return res.status(401).json({ message: "Authorization failed. Token is expired or malformed." });
   }
 };
 
-export const requireSubscription = async (req, res, next) => {
-  const user = await User.findById(req.user.id);
-  if (!user) return res.status(404).json({ message: "User not found." });
-  if (
-    !req.user ||
-    !req.user.isSubscribed ||
-    req.user.subscriptionExpires < new Date()
-  ) {
-    return res.status(403).json({ message: "Subscription required" });
-  }
-  // console.log("User in requireSubscription:", req.user);
+/**
+ * Middleware layer to gate premium streaming subscription access
+ */
+export const requireSubscription = (req, res, next) => {
+  try {
+    if (!req.user || !req.user.isSubscribed) {
+      return res.status(403).json({ message: "Access denied. Active subscription package required." });
+    }
 
-  next();
-};
-// Require game access
-export const requireGameAccess = async (req, res, next) => {
-  if (
-    !req.user ||
-    (req.user.subscriptionType !== "premium" &&
-      !(req.user.subscriptionType === "basic" && req.user.hasGameAccess))
-  ) {
-    return res.status(403).json({ message: "Game access not granted" });
+    // Protect against string type evaluation desync bugs using an explicit date comparison wrap
+    if (req.user.subscriptionExpires && new Date(req.user.subscriptionExpires) < new Date()) {
+      return res.status(403).json({ message: "Access denied. Your active subscription period has expired." });
+    }
+
+    return next();
+  } catch (err) {
+    console.error("Subscription Gating Internal Error:", err);
+    return res.status(500).json({ message: "Internal server validation failure." });
   }
-  next();
 };
 
+/**
+ * Middleware layer to validate specialized arcade game entry access
+ */
+export const requireGameAccess = (req, res, next) => {
+  try {
+    if (!req.user) {
+      return res.status(403).json({ message: "Authentication validation state context missing." });
+    }
+
+    // Premium users bypass entry fees. Basic tiers must have an validated payment token flag active.
+    const hasPremiumPass = req.user.subscriptionType === "premium";
+    const hasPaidBasicEntry = req.user.subscriptionType === "basic" && req.user.hasGameAccess;
+
+    if (!hasPremiumPass && !hasPaidBasicEntry) {
+      return res.status(403).json({ message: "Access denied. Valid game session entry payment token required." });
+    }
+
+    return next();
+  } catch (err) {
+    console.error("Game Access Gate Error:", err);
+    return res.status(500).json({ message: "Internal server verification failure." });
+  }
+};
+
+/**
+ * Middleware layer to protect creator content management features
+ */
 export const requireProducer = (req, res, next) => {
   if (!req.user || !req.user.isProducer) {
     return res.status(403).json({
-      message: "Producer account required",
+      message: "Access denied. Verified producer portal credentials required.",
     });
   }
-
-  next();
+  return next();
 };
 
-export const requireAdmin = async (req, res, next) => {
-  const user = await User.findById(req.user.id);
-  if (!user || !user.isAdmin) {
-    return res.status(403).json({ message: "Admin access required" });
+/**
+ * Middleware layer to restrict platform settings to system administrators
+ */
+export const requireAdmin = (req, res, next) => {
+  // Optimized: Evaluates flag values immediately from memory state without hitting DB again
+  if (!req.user || !req.user.isAdmin) {
+    return res.status(403).json({ message: "Access denied. Administrative credentials required." });
   }
-  next();
+  return next();
 };

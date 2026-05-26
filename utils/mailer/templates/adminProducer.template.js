@@ -1,45 +1,29 @@
 /**
- * Email sent to admin when a new producer submits the become-producer form.
- * Contains all submitted details + Accept / Reject action buttons.
- *
- * @param {object} opts
- * @param {string} opts.producerName
- * @param {string} opts.producerId
- * @param {string} opts.userId
- * @param {string} opts.email
- * @param {string} opts.productionName
- * @param {string} opts.countryOfResidence
- * @param {string} opts.prodCountry
- * @param {string} opts.bio
- * @param {string} opts.prodDesc
- * @param {string} opts.budget
- * @param {string} opts.intendedProfit
- * @param {string} opts.promoteIntent
- * @param {string} opts.whyUs
- * @param {string} opts.others
- * @param {string} opts.campaignSource
- * @param {string} opts.existingApplication
- * @param {string} opts.adminBaseUrl  e.g. "https://admin.flixora.co.uk"
+ * Email template dispatched to system administrators when a new creator profile application commits to the database.
+ * Provides a comprehensive visual ledger of applicant parameters alongside single-click moderation access hooks.
  */
-export const adminProducerNotificationTemplate = ({
-  producerName,
-  producerId,
-  userId,
-  email,
-  productionName,
-  countryOfResidence,
-  prodCountry,
-  bio,
-  prodDesc,
-  budget,
-  intendedProfit,
-  promoteIntent,
-  whyUs,
-  others,
-  campaignSource,
-  existingApplication,
-  adminBaseUrl,
-}) => {
+export const adminProducerNotificationTemplate = (options) => {
+  // Destructuring inside the function body completely bypasses the swagger-jsdoc parser parameter crash
+  const {
+    producerName,
+    producerId,
+    userId,
+    email,
+    productionName,
+    countryOfResidence,
+    prodCountry,
+    bio,
+    prodDesc,
+    budget,
+    intendedProfit,
+    promoteIntent,
+    whyUs,
+    others,
+    campaignSource,
+    existingApplication,
+    adminBaseUrl,
+  } = options;
+
   const approveUrl = `${adminBaseUrl}/api/admin/producers/${producerId}/approve`;
   const rejectUrl = `${adminBaseUrl}/api/admin/producers/${producerId}/reject`;
 
@@ -47,7 +31,7 @@ export const adminProducerNotificationTemplate = ({
     value
       ? `<tr>
           <td style="padding:8px 12px;font-weight:600;color:#555;white-space:nowrap;vertical-align:top;width:200px">${label}</td>
-          <td style="padding:8px 12px;color:#222">${value || "—"}</td>
+          <td style="padding:8px 12px;color:#222">${value}</td>
          </tr>`
       : "";
 
@@ -64,7 +48,6 @@ export const adminProducerNotificationTemplate = ({
       <td align="center">
         <table width="620" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:10px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.08)">
 
-          <!-- Header -->
           <tr>
             <td style="background:#12121a;padding:28px 36px;text-align:center">
               <h1 style="margin:0;color:#10b981;font-size:22px;letter-spacing:1px">FLIXORA</h1>
@@ -72,7 +55,6 @@ export const adminProducerNotificationTemplate = ({
             </td>
           </tr>
 
-          <!-- Title -->
           <tr>
             <td style="padding:28px 36px 10px">
               <h2 style="margin:0;font-size:18px;color:#111">New Producer Application Submitted</h2>
@@ -82,7 +64,6 @@ export const adminProducerNotificationTemplate = ({
             </td>
           </tr>
 
-          <!-- Details Table -->
           <tr>
             <td style="padding:10px 36px 24px">
               <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;font-size:14px">
@@ -108,7 +89,6 @@ export const adminProducerNotificationTemplate = ({
             </td>
           </tr>
 
-          <!-- Action Buttons -->
           <tr>
             <td style="padding:0 36px 36px">
               <p style="margin:0 0 16px;font-size:14px;color:#444;font-weight:600">Take Action:</p>
@@ -134,7 +114,6 @@ export const adminProducerNotificationTemplate = ({
             </td>
           </tr>
 
-          <!-- Footer -->
           <tr>
             <td style="background:#f9fafb;padding:18px 36px;border-top:1px solid #e5e7eb;text-align:center">
               <p style="margin:0;font-size:12px;color:#aaa">Flixora Admin System · Built for Original Content</p>

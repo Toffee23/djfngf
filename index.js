@@ -1,3 +1,6 @@
+import dns from "dns";
+dns.setServers(["1.1.1.1", "8.8.8.8"]);
+
 import { config } from "dotenv";
 config();
 
@@ -95,18 +98,18 @@ mongoose
 /**
  * @swagger
  * /
- *   get:
- *     summary: API welcome route
- *     description: Returns a welcome message to confirm the API is running.
- *     responses:
+ * get:
+ * summary: API welcome route
+ * description: Returns a welcome message to confirm the API is running.
+ * responses:
  *
- *       200:
- *         description: A welcome message
- *         content:
- *           text/plain:
- *             schema:
- *               type: string
- *               example: Welcome to the Prime Pit API
+ * 200:
+ * description: A welcome message
+ * content:
+ * text/plain:
+ * schema:
+ * type: string
+ * example: Welcome to the Prime Pit API
  */
 app.get("/", (req, res) => {
   res.send("Welcome to the Prime Pit API");
@@ -117,7 +120,7 @@ app.use("/api/paystack", paystackRoutes); // Paystack payment routes
 // app.use("/api/games", gameRoutes); // Game-related routes
 app.use("/api/updateprofile", updateprofileRoutes);
 app.use("/api/resetprofile", resetprofiledefaultRoutes);
-app.use("/api/fetchuser", fetchuserprofileRoutes);
+  app.use("/api/fetchuser", fetchuserprofileRoutes);
 // app.use("/api/messages", messagesRoutes); // Messages-related routes
 app.use("/api/movies", movieRoutes);
 app.use("/api/upload", uploadRoutes);
